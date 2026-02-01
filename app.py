@@ -1,56 +1,68 @@
 import streamlit as st
 import json
+import re
 
 st.set_page_config(page_title="Insta Takip Kontrol", page_icon="📸")
 
 st.title("📸 Kim Beni Takip Etmiyor?")
-st.write("Instagram'dan indirdiğin JSON dosyalarını yükle, seni geri takip etmeyenleri anında gör.")
+st.write("Instagram JSON dosyalarını yükle, kimlerin seni geri takip etmediğini bul.")
 
-# Dosya yükleme alanları
 col1, col2 = st.columns(2)
 with col1:
     followers_file = st.file_uploader("followers_1.json yükle", type=['json'])
 with col2:
     following_file = st.file_uploader("following.json yükle", type=['json'])
 
+def smart_extract(obj):
+    """JSON içinde 'title', 'value' veya 'href' olan her şeyi toplar."""
+    found = set()
+    
+    def walk(data):
+        if isinstance(data, dict):
+            for k, v in data.items():
+                # Senin dosyan için en kritik kısım burası: 'title'ı yakalıyoruz
+                if k == 'title' and isinstance(v, str):
+                    found.add(v)
+                elif k == 'value' and isinstance(v, str):
+                    found.add(v)
+                elif k == 'href' and isinstance(v, str):
+                    # Linkin sonundaki kullanıcı adını ayıkla
+                    match = re.search(r'instagram\.com/(_u/)?([^/?]+)', v)
+                    if match:
+                        found.add(match.group(2))
+                else:
+                    walk(v)
+        elif isinstance(data, list):
+            for item in data:
+                walk(item)
+                
+    walk(obj)
+    return found
+
 if followers_file and following_file:
     try:
-        # JSON verilerini yükle
-        followers_data = json.load(followers_file)
-        following_data = json.load(following_file)
+        f_data = json.load(followers_file)
+        fg_data = json.load(following_file)
 
-        # Takipçileri ayıkla (Instagram yapısına göre)
-        # Not: JSON yapısı bazen liste bazen dict içinde geliyor, kontrol ekliyoruz.
-        followers = set()
-        for item in followers_data:
-            followers.add(item['string_list_data'][0]['value'])
+        followers = smart_extract(f_data)
+        following = smart_extract(fg_data)
 
-        # Takip edilenleri ayıkla
-        following = set()
-        for item in following_data['relationships_following']:
-            following.add(item['string_list_data'][0]['value'])
+        # Temizlik: Takipçiler listesinde bazen 'Takipçiler' başlığı 
+        # veya boş stringler kalabilir, onları eliyoruz.
+        following = {u for u in following if u and not u.startswith('http')}
+        followers = {u for u in followers if u and not u.startswith('http')}
 
-        # Analiz
-        not_following_back = list(following - followers)
-        not_following_back.sort()
+        not_following_back = sorted(list(following - followers))
 
         st.divider()
-        
+        st.write(f"📊 **Sistem Analizi:** {len(followers)} Takipçi | {len(following)} Takip Edilen")
+
         if not_following_back:
-            st.error(f"Seni takip etmeyen {len(not_following_back)} kişi bulundu!")
-            
-            # Arama kutusu (Arkadaşların listede birini aratabilsin diye)
-            search = st.text_input("Listede ara:", placeholder="Kullanıcı adı yazın...")
-            
-            filtered_list = [user for user in not_following_back if search.lower() in user.lower()]
-            
-            for user in filtered_list:
-                st.markdown(f"- [{user}](https://instagram.com/{user})")
+            st.error(f"Seni geri takip etmeyen {len(not_following_back)} kişi bulundu:")
+            for user in not_following_back:
+                st.markdown(f"- [@{user}](https://instagram.com/{user})")
         else:
-            st.success("Harika! Herkes seni geri takip ediyor.")
+            st.success("Tebrikler! Herkes seni geri takip ediyor.")
 
     except Exception as e:
-        st.error(f"Dosya işlenirken bir hata oluştu. Lütfen doğru JSON dosyalarını yüklediğinden emin ol. Hata: {e}")
-
-else:
-    st.info("Lütfen her iki dosyayı da yukarıya yükle.")
+        st.error(f"Bir hata oluştu: {e}")
