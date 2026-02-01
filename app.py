@@ -20,13 +20,11 @@ def smart_extract(obj):
     def walk(data):
         if isinstance(data, dict):
             for k, v in data.items():
-                # Senin dosyan için en kritik kısım burası: 'title'ı yakalıyoruz
                 if k == 'title' and isinstance(v, str):
                     found.add(v)
                 elif k == 'value' and isinstance(v, str):
                     found.add(v)
                 elif k == 'href' and isinstance(v, str):
-                    # Linkin sonundaki kullanıcı adını ayıkla
                     match = re.search(r'instagram\.com/(_u/)?([^/?]+)', v)
                     if match:
                         found.add(match.group(2))
@@ -47,8 +45,7 @@ if followers_file and following_file:
         followers = smart_extract(f_data)
         following = smart_extract(fg_data)
 
-        # Temizlik: Takipçiler listesinde bazen 'Takipçiler' başlığı 
-        # veya boş stringler kalabilir, onları eliyoruz.
+      
         following = {u for u in following if u and not u.startswith('http')}
         followers = {u for u in followers if u and not u.startswith('http')}
 
